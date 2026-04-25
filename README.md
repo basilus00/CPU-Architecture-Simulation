@@ -1,145 +1,122 @@
-# CPU Architecture Simulation — Elementary Machine (Qt + Python)
+# CPU Architecture Simulation (Educational)
 
-This repository contains **two educational CPU simulators**:
+This repository contains multiple small projects that simulate an **elementary CPU architecture** and the **fetch → decode → execute** cycle, with both **visual** and **console** versions.
 
-1) **`machine_sim_qt.py`** — a **step‑by‑step visual simulator** (PySide6 / Qt) that reproduces the “machine élémentaire” style used in computer architecture courses (FETCH → DECODE → EXECUTE), highlighting transfers between **CO, RI, RA, RM, ACC, UAL, SEQ** and the memory grid.
+## Projects in this repo
 
-2) **`simpleCPU.py`** — a **console CPU simulator** (register machine) that demonstrates the classic **fetch → decode → execute** cycle with an ALU and a Zero flag.
+### 1) `machine_sim_qt.py` — Qt GUI micro-step simulator (blue theme)
+A modern UI (PySide6/Qt) that shows CPU execution **step-by-step** with:
+- Phase tag: **CHERCHER / DÉCODER / EXÉCUTER**
+- Flow description of the current micro-step
+- Bus indicator
+- CPU blocks (SEQ, UAL, ACC, RI, CO, RA) + RM display
+- Memory grid (default view: 0..19)
+- Execution log
 
-The goal is to help students understand **how a CPU executes instructions** and how values move between registers, memory, and the ALU.
+**Screenshot**
+![Qt GUI Simulator](docs/machine_sim_qt.png)
+
+Run:
+```bash
+pip install PySide6
+python machine_sim_qt.py
+```
 
 ---
 
-## Contents
+### 2) `cpu_visual_sim.py` — PDF-style schematic + bus visualization
+A QGraphicsScene/QGraphicsView visualization that draws a schematic similar to course slides:
+- CPU panel + memory table
+- Big horizontal bus + memory riser
+- Routed (orthogonal) arrows to avoid cutting through blocks
+- Highlights active transfers (CO→RA, MEM→RM, RM→RI, etc.)
 
-- [`machine_sim_qt.py`](./machine_sim_qt.py) — Qt GUI simulator (blue theme, step log, memory grid)
-- [`simpleCPU.py`](./simpleCPU.py) — console CPU (R1..R4, memory[0..15], branching)
-- [`Qwen_html_20260425_1zdw71sdp.html`](./Qwen_html_20260425_1zdw71sdp.html) — original HTML/canvas prototype (reference)
-  
-![html_GUI Screenshot](docs/html.png)
+**Screenshot**
+> Add an image at: `docs/cpu_visual_sim.png`
+
+![CPU Schematic Simulator](docs/cpu_visual_sim.png)
+
+Run:
+```bash
+pip install PySide6
+python cpu_visual_sim.py
+```
 
 ---
 
-## 1) GUI Simulator (Qt) — `machine_sim_qt.py`
+### 3) `Qwen_html_20260425_1zdw71sdp.html` — HTML Canvas prototype
+An earlier HTML/Canvas version used as a reference for the visual style and transfers.
 
-### What it shows
-The GUI simulates an **elementary machine** using micro‑steps. You can run one micro‑step at a time and see:
+**Screenshot**
+> Add an image at: `docs/html_canvas.png`
 
-- **Phase tag**: `CHERCHER` (Fetch), `DÉCODER` (Decode), `EXÉCUTER` (Execute)
-- **Flow description**: human‑readable explanation of the current transfer
-- **Bus bar**: highlights when a transfer uses the bus
-- **CPU blocks** (left):
-  - `SEQ` — Sequencer / control
-  - `UAL` — ALU
-  - `ACC` — accumulator
-  - `RI` — instruction register
-  - `CO` — program counter
-  - `RA` — address register
-- **Memory** (right): grid of addresses (default view shows 0..19)
-- **RM** — memory buffer register (displayed under memory)
-- **Execution log**: list of all micro‑steps, highlighting the current one
+![HTML Canvas Prototype](docs/html.png)
 
-### Instruction format
-Instructions are stored as **4 digits**:
+Run: open the file in your browser:
+- double click it locally, or
+- use VS Code “Live Server”, etc.
+
+---
+
+### 4) `simpleCPU.py` — Console CPU (register machine)
+A text-based CPU simulator demonstrating:
+- Registers: R1..R4
+- Memory (16 cells)
+- PC, IR, ALU temp register
+- Zero flag + control flow (JMP, JZ)
+- Prints fetch/decode/execute logs and state after each instruction
+
+**Screenshot**
+> Add an image at: `docs/simpleCPU_terminal.png`
+
+![Console CPU Output](docs/simpleCPU_terminal.png)
+
+Run:
+```bash
+python simpleCPU.py
+```
+
+---
+
+## Instruction formats
+
+### Elementary machine (visual simulators)
+Instructions are 4-digit numbers:
 - `opcode = instr // 100`
 - `operand = instr % 100`
 
-Supported opcodes (as implemented in the step builder):
+Supported opcodes:
+- `10` LOAD: `ACC ← MEM[operand]`
+- `20` STORE: `MEM[operand] ← ACC`
+- `30` ADD: `ACC ← ACC + MEM[operand]`
+- `50` JUMP: `CO ← operand`
+- `99` HALT
 
-| Opcode | Name  | Meaning |
-|------:|-------|---------|
-| 10 | LOAD  | `ACC ← MEM[operand]` |
-| 20 | STORE | `MEM[operand] ← ACC` |
-| 30 | ADD   | `ACC ← ACC + MEM[operand]` |
-| 50 | JUMP  | `CO ← operand` |
-| 99 | HALT  | Stop |
+### Console CPU (`simpleCPU.py`)
+Instruction tuples like:
+- `("MOV","R1",2)`
+- `("SUB","R1","R2")`
+- `("STORE","R1",0)`
+- `("JZ", 7)`
+- `("HALT",)`
 
-### Default demo program (preloaded)
-Memory is initialized with a small example:
+---
 
-- `1010` (LOAD from address 10)
-- `3011` (ADD address 11)
-- `2012` (STORE into address 12)
-- `5005` (JUMP to address 5, for demonstration)
-- `99` (HALT)
-
-And sample data:
-- `MEM[10] = 23`
-- `MEM[11] = 14`
-
-Expected result: after executing LOAD + ADD + STORE, **37** should be written to `MEM[12]`.
-
-### Run the GUI
-![GUI Screenshot](docs/gui.png)
-#### Requirements
-- Python **3.9+**
-- PySide6 (Qt bindings)
+## Requirements
+- Python 3.9+
+- For GUI versions: `PySide6`
 
 Install:
 ```bash
 pip install PySide6
 ```
 
-Run:
-```bash
-python machine_sim_qt.py
-```
-
-### Controls
-- **↺ Réinitialiser**: reset memory/registers and rebuild the step list
-- **Étape suivante →**: advance exactly one micro‑step
-- **▶ Auto** / **■ Stop**: auto-run through micro‑steps with a timer
-
-### Customization
-- Change initial memory/program: edit `MEM_INIT` in `machine_sim_qt.py`
-- Adjust the micro‑step sequence: edit `build_steps()` in `machine_sim_qt.py`
-- Show all memory cells (0..39): change `visible_addrs = list(range(0, 20))` to `range(0, 40)` (or implement scrolling)
-- Theme: modify the `THEME` stylesheet string
-
----
-
-## 2) Console CPU (Register Machine) — `simpleCPU.py`
-
-### What it simulates
-A small register machine with:
-
-- Registers: `R1, R2, R3, R4`
-- Memory: `memory[0..15]`
-- `pc` (program counter)
-- `ir` (instruction register)
-- `alu_temp` (temporary ALU storage)
-- `zero_flag` (used by `JZ`)
-
-### Supported instructions
-Instructions are tuples like `("MOV", "R1", 2)`:
-
-| Instruction | Example | Meaning |
-|------------|---------|---------|
-| MOV | `("MOV","R1",2)` | load immediate/register into destination |
-| ADD | `("ADD","R1","R2")` | `R1 ← R1 + R2` |
-| SUB | `("SUB","R1","R2")` | `R1 ← R1 - R2` |
-| LOAD | `("LOAD","R1",0)` | `R1 ← memory[0]` |
-| STORE | `("STORE","R1",0)` | `memory[0] ← R1` |
-| JMP | `("JMP",3)` | `pc ← 3` |
-| JZ | `("JZ",7)` | if Zero flag true, `pc ← 7` |
-| HALT | `("HALT",)` | stop |
-
-### Run the console CPU
-```bash
-python simpleCPU.py
-```
-
-It prints:
-- FETCH / DECODE / EXECUTE messages
-- register and memory state after each instruction
-- a 1-second pause per cycle for readability (`time.sleep(1)`)
-
 ---
 
 ## Troubleshooting
 
 ### `ModuleNotFoundError: No module named 'PySide6'`
-PySide6 is installed in a different environment than the interpreter you’re using to run the program.
+PySide6 is installed in a different environment than the interpreter you are running.
 
 Fix:
 ```bash
@@ -147,14 +124,14 @@ python -m pip install PySide6
 python -c "import PySide6; print(PySide6.__version__)"
 ```
 
-In VS Code: select the correct Python interpreter (`Ctrl+Shift+P` → “Python: Select Interpreter”).
+In VS Code: **Python: Select Interpreter** and choose the environment where PySide6 is installed.
 
 ---
 
-## Roadmap / Ideas
-- Add routed arrows and full schematic diagram wiring (PDF-like)
-- Add explicit DRAP/flags behavior in the GUI simulator
-- Add additional opcodes (SUB, conditional jumps)
-- Export step traces to a file (for assignments / grading)
+## Add your screenshots
+Create these files in the repo so the images above render:
 
----
+- `docs/machine_sim_qt.png`
+- `docs/cpu_visual_sim.png`
+- `docs/html_canvas.png`
+- `docs/simpleCPU_terminal.png`
