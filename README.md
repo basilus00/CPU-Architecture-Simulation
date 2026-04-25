@@ -15,6 +15,7 @@ The goal is to help students understand **how a CPU executes instructions** and 
 - [`machine_sim_qt.py`](./machine_sim_qt.py) — Qt GUI simulator (blue theme, step log, memory grid)
 - [`simpleCPU.py`](./simpleCPU.py) — console CPU (R1..R4, memory[0..15], branching)
 - [`Qwen_html_20260425_1zdw71sdp.html`](./Qwen_html_20260425_1zdw71sdp.html) — original HTML/canvas prototype (reference)
+  
 ![html_GUI Screenshot](docs/html.png)
 
 ---
