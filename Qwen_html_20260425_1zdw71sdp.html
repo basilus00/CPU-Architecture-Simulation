@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Simulateur Machine Élémentaire (Style PDF)</title>
+    <style>
+        body { font-family: 'Arial', sans-serif; background-color: #f4f4f4; display: flex; flex-direction: column; align-items: center; }
+        h2 { color: #333; }
+        canvas { background-color: white; border: 2px solid #333; box-shadow: 0 0 10px rgba(0,0,0,0.2); }
+        .controls { margin: 20px; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; background-color: #28a745; color: white; border: none; border-radius: 5px; margin: 0 5px; }
+        button:hover { background-color: #218838; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        #status { margin-top: 10px; font-weight: bold; color: #0056b3; height: 25px; font-size: 18px; }
+        #detail { font-size: 14px; color: #555; }
+    </style>
+</head>
+<body>
+
+    <h2>Simulateur Architecture (Style PDF)</h2>
+    <canvas id="simCanvas" width="900" height="600"></canvas>
+    
+    <div class="controls">
+        <button id="stepBtn" onclick="nextStep()">Étape Suivante</button>
+        <button id="resetBtn" onclick="resetSim()" style="background-color: #dc3545;">Réinitialiser</button>
+    </div>
+    <div id="status">Prêt.</div>
+    <div id="detail">Initialisation...</div>
+
+<script>
+    const canvas = document.getElementById('simCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // --- DATA ---
+    let memory = new Array(40).fill(0);
+    memory[0] = 1010; memory[1] = 3011; memory[2] = 2012; memory[3] = 5005; memory[5] = 99;
+    memory[10] = 23; memory[11] = 14;
+
+    // Registers
+    let CO = 0; 
+    let RI = 0; 
+    let RA = 0; 
+    let ACC = 0; 
+    let UAL_RES = 0; // Result of ALU
+    let DRAP = 0; // Flags
+
+    // State Machine
+    const STATES = {
+        FETCH_RA: 0,  // CO -> RA
+        FETCH_RI: 1,  // Mem[RA] -> RI
+        FETCH_INC: 2, // CO + 1
+        DECODE: 3,    
+        EXEC_LOAD_1: 4, // Operand -> RA
+        EXEC_LOAD_2: 5, // Mem[RA] -> ACC
+        EXEC_ADD_1: 6,  // Operand -> RA
+        EXEC_ADD_2: 7,  // ACC + Mem[RA] -> UAL
+        EXEC_ADD_3: 8,  // UAL -> ACC
+        EXEC_STORE_1: 9, // Operand -> RA
+        EXEC_STORE_2: 10, // ACC -> Mem[RA]
+        EXEC_JUMP: 11,  // Operand -> CO
+        HALT: 99
+    };
+
+    let currentState = STATES.FETCH_RA;
+    let currentOpcode = 0;
+    let currentOperand = 0;
+    let isHalted = false;
+
+    // --- DRAWING HELPERS ---
+    function drawBox(x, y, w, h, label, value, color="white", borderColor="black") {
+        ctx.fillStyle = color;
+        ctx.fillRect(x, y, w, h);
+        ctx.strokeStyle = borderColor;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, w, h);
+        
+        ctx.fillStyle = "black";
+        ctx.font = "bold 12px Arial";
+        ctx.fillText(label, x + 5, y + 15);
+        
+        ctx.fillStyle = "darkblue";
+        ctx.font = "bold 16px Arial";
+        ctx.fillText(value, x + 5, y + 40);
+    }
+
+    function drawArrow(x1, y1, x2, y2, color="red", width=3) {
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.stroke();
+        
+        // Arrowhead
+        let angle = Math.atan2(y2 - y1, x2 - x1);
+        ctx.beginPath();
+        ctx.moveTo(x2, y2);
+        ctx.lineTo(x2 - 10 * Math.cos(angle - Math.PI / 6), y2 - 10 * Math.sin(angle - Math.PI / 6));
+        ctx.lineTo(x2 - 10 * Math.cos(angle + Math.PI / 6), y2 - 10 * Math.sin(angle + Math.PI / 6));
+        ctx.lineTo(x2, y2);
+        ctx.fillStyle = color;
+        ctx.fill();
+    }
+
+    function drawMainBus() {
+        ctx.beginPath();
+        ctx.moveTo(50, 520);
+        ctx.lineTo(850, 520);
+        ctx.strokeStyle = "#0056b3";
+        ctx.lineWidth = 5;
+        ctx.stroke();
+        ctx.fillStyle = "black";
+        ctx.font = "14px Arial";
+        ctx.fillText("BUS PRINCIPAL", 400, 510);
+    }
+
+    function drawMemory() {
+        let startX = 450;
+        let startY = 20;
+        let colW = 100;
+        let rowH = 35;
+
+        // Draw 4 Columns
+        for (let col = 0; col < 4; col++) {
+            let baseAddr = col * 10;
+            let x = startX + col * colW;
+            
+            // Header
+            ctx.fillStyle = "#ddd";
+            ctx.fillRect(x, startY - 20, colW, 20);
+            ctx.strokeRect(x, startY - 20, colW, 20);
+            ctx.fillText(`Col ${col*10}-${col*10+9}`, x+5, startY-5);
+
+            for (let row = 0; row < 10; row++) {
+                let addr = baseAddr + row;
+                let y = startY + row * rowH;
+
+                // Highlight Logic
+                let highlight = (RA === addr) ? "#ffeb3b" : "white";
+                
+                ctx.fillStyle = highlight;
+                ctx.fillRect(x, y, colW, rowH);
+                ctx.strokeRect(x, y, colW, rowH);
+
+                ctx.fillStyle = "black";
+                ctx.font = "12px Arial";
+                ctx.fillText(`${addr}:`, x + 5, y + 20);
+                ctx.font = "bold 14px Arial";
+                ctx.fillText(memory[addr], x + 30, y + 22);
+            }
+        }
+    }
+
+    function drawCPU() {
+        // SEQ (Sequencer)
+        drawBox(150, 20, 100, 50, "SEQ", "", "#eee");
+
+        // UAL (ALU) - Triangle-ish shape
+        ctx.beginPath();
+        ctx.moveTo(50, 150);
+        ctx.lineTo(150, 200);
+        ctx.lineTo(50, 250);
+        ctx.closePath();
+        ctx.fillStyle = "#ddd";
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = "black";
+        ctx.fillText("UAL", 60, 205);
+
+        // ACC
+        drawBox(30, 300, 80, 60, "ACC", ACC);
+
+        // DRAP (Flags)
+        drawBox(120, 300, 60, 40, "Drap", DRAP, "#eee");
+
+        // Registers Group (Right side of CPU)
+        // RA
+        drawBox(250, 100, 80, 50, "RA", RA);
+        // RI
+        drawBox(250, 200, 80, 50, "RI", RI);
+        // CO
+        drawBox(250, 300, 80, 50, "CO", CO);
+    }
+
+    function drawTransfers() {
+        // Bus is at Y=520
+        let busY = 520;
+        let raX = 290; // Center of RA
+        let riX = 290; // Center of RI
+        let coX = 290; // Center of CO
+        let accX = 70; // Center of ACC
+        let memX = 500; // Approx Memory Bus connection
+
+        // Visualize Active Transfer based on State
+        switch(currentState) {
+            case STATES.FETCH_RA:
+                // CO -> Bus -> RA
+                drawArrow(coX, 350, coX, busY); // CO to Bus
+                drawArrow(coX, busY, raX, busY); // Move along Bus
+                drawArrow(raX, busY, raX, 150);  // Bus to RA
+                document.getElementById('status').innerText = "Transfert: CO vers RA";
+                break;
+
+            case STATES.FETCH_RI:
+                // Mem[RA] -> Bus -> RI
+                drawArrow(memX, busY, riX, busY); // Bus to RI
+                drawArrow(riX, busY, riX, 250);   // Bus to RI Box
+                document.getElementById('status').innerText = "Transfert: Mémoire[RA] vers RI";
+                break;
+
+            case STATES.EXEC_LOAD_2:
+                // Mem[RA] -> Bus -> ACC
+                drawArrow(memX, busY, accX, busY);
+                drawArrow(accX, busY, accX, 360);
+                document.getElementById('status').innerText = "Transfert: Mémoire[RA] vers ACC";
+                break;
+            
+            case STATES.EXEC_STORE_2:
+                // ACC -> Bus -> Mem[RA]
+                drawArrow(accX, 360, accX, busY);
+                drawArrow(accX, busY, memX, busY);
+                document.getElementById('status').innerText = "Transfert: ACC vers Mémoire[RA]";
+                break;
+
+            case STATES.EXEC_JUMP:
+                 // Operand (from RI) -> CO
+                 // In this simple machine, Jump updates CO directly from the instruction
+                 // Visualizing it as a jump from the control unit area
+                 drawArrow(200, 100, 290, 350, "green");
+                 document.getElementById('status').innerText = "Transfert: Saut vers CO";
+                 break;
+        }
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawMemory();
+        drawCPU();
+        drawMainBus();
+        drawTransfers();
+    }
+
+    // --- LOGIC ---
+    function nextStep() {
+        if(isHalted) return;
+
+        switch(currentState) {
+            // --- FETCH ---
+            case STATES.FETCH_RA:
+                RA = CO;
+                currentState = STATES.FETCH_RI;
+                document.getElementById('detail').innerText = "RA reçoit la valeur de CO";
+                break;
+            case STATES.FETCH_RI:
+                RI = memory[RA];
+                currentOpcode = Math.floor(RI / 100);
+                currentOperand = RI % 100;
+                currentState = STATES.FETCH_INC;
+                document.getElementById('detail').innerText = `RI reçoit ${RI} (Code: ${currentOpcode}, Opérande: ${currentOperand})`;
+                break;
+            case STATES.FETCH_INC:
+                CO = CO + 1;
+                currentState = STATES.DECODE;
+                document.getElementById('detail').innerText = "CO s'incrémente";
+                break;
+            
+            // --- DECODE ---
+            case STATES.DECODE:
+                if(currentOpcode === 10) currentState = STATES.EXEC_LOAD_1;
+                else if(currentOpcode === 20) currentState = STATES.EXEC_STORE_1;
+                else if(currentOpcode === 30) currentState = STATES.EXEC_ADD_1;
+                else if(currentOpcode === 50) currentState = STATES.EXEC_JUMP;
+                else if(currentOpcode === 99) currentState = STATES.HALT;
+                break;
+
+            // --- EXECUTE: LOAD (10) ---
+            case STATES.EXEC_LOAD_1:
+                RA = currentOperand;
+                currentState = STATES.EXEC_LOAD_2;
+                document.getElementById('detail').innerText = `RA reçoit l'opérande ${currentOperand}`;
+                break;
+            case STATES.EXEC_LOAD_2:
+                ACC = memory[RA];
+                currentState = STATES.FETCH_RA; // Loop
+                document.getElementById('detail').innerText = `ACC reçoit ${ACC}`;
+                break;
+
+            // --- EXECUTE: STORE (20) ---
+            case STATES.EXEC_STORE_1:
+                RA = currentOperand;
+                currentState = STATES.EXEC_STORE_2;
+                document.getElementById('detail').innerText = `RA reçoit l'opérande ${currentOperand}`;
+                break;
+            case STATES.EXEC_STORE_2:
+                memory[RA] = ACC;
+                currentState = STATES.FETCH_RA; // Loop
+                document.getElementById('detail').innerText = `Mémoire[${RA}] reçoit ${ACC}`;
+                break;
+
+            // --- EXECUTE: ADD (30) ---
+            case STATES.EXEC_ADD_1:
+                RA = currentOperand;
+                currentState = STATES.EXEC_ADD_2;
+                document.getElementById('detail').innerText = `RA reçoit l'opérande ${currentOperand}`;
+                break;
+            case STATES.EXEC_ADD_2:
+                UAL_RES = ACC + memory[RA];
+                currentState = STATES.EXEC_ADD_3;
+                document.getElementById('detail').innerText = `UAL calcule ${ACC} + ${memory[RA]} = ${UAL_RES}`;
+                break;
+            case STATES.EXEC_ADD_3:
+                ACC = UAL_RES;
+                currentState = STATES.FETCH_RA; // Loop
+                document.getElementById('detail').innerText = `ACC reçoit le résultat ${UAL_RES}`;
+                break;
+
+            // --- EXECUTE: JUMP (50) ---
+            case STATES.EXEC_JUMP:
+                CO = currentOperand; // Jump directly to address
+                currentState = STATES.FETCH_RA; // Loop
+                document.getElementById('detail').innerText = `CO saute à l'adresse ${currentOperand}`;
+                break;
+
+            case STATES.HALT:
+                isHalted = true;
+                document.getElementById('status').innerText = "ARRÊT DU PROGRAMME (99)";
+                document.getElementById('stepBtn').disabled = true;
+                break;
+        }
+        draw();
+    }
+
+    function resetSim() {
+        memory = new Array(40).fill(0);
+        memory[0] = 1010; memory[1] = 3011; memory[2] = 2012; memory[3] = 5005; memory[5] = 99;
+        memory[10] = 23; memory[11] = 14;
+        
+        CO = 0; RI = 0; RA = 0; ACC = 0; UAL_RES = 0; DRAP = 0;
+        currentState = STATES.FETCH_RA;
+        isHalted = false;
+        document.getElementById('stepBtn').disabled = false;
+        document.getElementById('status').innerText = "Prêt.";
+        document.getElementById('detail').innerText = "Mémoire et registres réinitialisés.";
+        draw();
+    }
+
+    // Initial Draw
+    draw();
+
+</script>
+</body>
+</html>
